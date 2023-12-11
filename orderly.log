@@ -1,0 +1,212 @@
+[ name       ]  paper-third-figures-final
+[ id         ]  20231211-151910-222f940e
+[ sources    ]  R/general_fun.R
+[ ...        ]  R/pull_table.R
+[ ...        ]  R/fun_solar_system.R
+[ ...        ]  R/mitigate_table.R
+[ ...        ]  R/util.R
+[ ...        ]  R/plot_mitigate_timing.R
+[ ...        ]  R/fun_excess_ribbon.R
+[ ...        ]  R/fun.R
+[ global     ]  disease_palette.R -> R/disease_palette.R
+[ ...        ]  get_estimates_annex_covidimpact.R -> R/get_estimates_annex_covidimpact.R
+[ resource   ]  report.Rmd
+[ depends    ]  internal-2020-native-data-sets@20221130-084334-8080423a:native-impact-estimates-post-2017-runs.rds -> source/native-impact-estimates-post-2017-runs.rds
+[ ...        ]  incoming-dtp-bcg-impact-ratios@20221207-153343-32cec579:dtp_bcg_impact_ratios.rds -> source/dtp_bcg_impact_ratios.rds
+[ ...        ]  202210covidimpact-impact-estimates@20221123-114817-a7dfdcde:life_time_impact.rds -> life_time_impact.rds
+[ ...        ]  202210covidimpact-impact-estimates@20221123-114817-a7dfdcde:cross_sectional_impact.rds -> cross_sectional_impact.rds
+[ ...        ]  202210covidimpact-impact-estimates@20221123-114817-a7dfdcde:intervention_perspective_impact.rds -> intervention_perspective_impact.rds
+[ ...        ]  adhoc-covidimpact-iu@20231013-092900-bf3242ab:combined_aggregated_model_average.rds -> combined_data.rds
+[ ...        ]  202210covidimpact-burden-estimates@20221206-134503-8b20ead8:burden_202210covidimpact.rds -> burden_202210covidimpact.rds
+[ ...        ]  202110-burden-estimates@20221121-142150-b7b1f4f0:burden_202110gavi.rds -> burden_202110gavi.rds
+[ parameter  ]  short_run: FALSE
+[ start      ]  2023-12-11 15:19:10
+[ parameter  ]  short_run: FALSE
+
+Attaching package: ‘dplyr’
+
+The following objects are masked from ‘package:stats’:
+
+    filter, lag
+
+The following objects are masked from ‘package:base’:
+
+    intersect, setdiff, setequal, union
+
+
+> R.utils::sourceDirectory("R", modifiedOnly = FALSE)
+
+> options(dplyr.summarise.inform = FALSE)
+
+> ctry <- DBI::dbReadTable(con, "country_metadata")
+
+> ctry <- ctry %>% filter(touchstone == max(unique(ctry$touchstone)))
+
+> ctry <- ctry %>% mutate(who_region = ifelse(who_region == 
++     "PAHO", who_region, gsub("O", "", who_region)))
+
+> d_def_cohort_2030 <- pull_table(annex, con, schema_name = "_202210covidimpact_default_update", 
++     table = "cohort_all", period = 2019:2030, short_run = short_run) %>% 
++     mutate(who_region = ifelse(who_region == "PAHO", who_region, 
++         gsub("O", "", who_region)))
+[1] "Extracting data..."
+
+> d_noc_cohort_2030 <- pull_table(annex, con, schema_name = "_202210covidimpact_default_nocovid", 
++     table = "cohort_all", period = 2019:2030, short_run = short_run) %>% 
++     mutate(who_region = ifelse(who_region == "PAHO", who_region, 
++         gsub("O", "", who_region)))
+[1] "Extracting data..."
+
+> d_def_cross_2030 <- pull_table(annex, con, schema_name = "_202210covidimpact_default_update", 
++     table = "cross_all", period = 2019:2030, short_run = short_run) %>% 
++     mutate(who_region = ifelse(who_region == "PAHO", who_region, 
++         gsub("O", "", who_region)))
+[1] "Extracting data..."
+
+> d_noc_cross_2030 <- pull_table(annex, con, schema_name = "_202210covidimpact_default_nocovid", 
++     table = "cross_all", period = 2019:2030, short_run = short_run) %>% 
++     mutate(who_region = ifelse(who_region == "PAHO", who_region, 
++         gsub("O", "", who_region)))
+[1] "Extracting data..."
+
+> df <- readRDS("source/native-impact-estimates-post-2017-runs.rds")
+
+> df <- df %>% filter(touchstone_src == "202110gavi")
+
+> df <- df %>% select(disease, modelling_group, activity_type, 
++     vaccine, country, country_name, deaths_averted_rate, cases_averted_rate, 
++     dalys_averted_rate) %>% distinct()
+
+> df <- df %>% rename(cases_averted_rate_central = cases_averted_rate, 
++     deaths_averted_rate_central = deaths_averted_rate, dalys_averted_rate_central = dalys_averted_rate)
+
+> df_uncert <- DBI::dbGetQuery(annex, "select distinct disease, modelling_group, run_id, vaccine, activity_type, country, deaths_averted_rate, cases_averted_rate, dalys_averted_rate from intervention_all_2021 where deaths_averted_rate is not NULL")
+
+> df <- append_dtp(df, con)
+
+> df <- full_join(df, df_uncert, multiple = "all")
+Joining with `by = join_by(disease, vaccine, country, deaths_averted_rate, modelling_group, activity_type, run_id)`
+> dis_subset_parm <- NULL
+
+> ctry_subset_parm <- NULL
+
+> df <- df %>% group_by(disease, vaccine, country, country_name, 
++     activity_type, run_id) %>% summarise(deaths_averted_rate = mean(deaths_averted_rate, 
++     na.rm = TRUE), cases_averted_rate = mean(cases_averted_rate, 
++     na.rm = TRUE), dalys_averted_rate = mean(dalys_averted_rate, 
++     na.rm = TRUE))
+
+> fvps <- bind_rows(lapply(c("default_update", "default_nocovid"), 
++     FUN = function(x) vimpact::extract_vaccination_history(con, 
++         touchstone_cov = "202210covidimpactiu", demographic_source = "dds-202208", 
++         coverage_scenario_type = x, disease_to_extract = dis_subset_parm, 
++         countries_to_extract = ctry_subset_parm, year_max = 2030)))
+use specific version of UNWPP data, touchstone_pop parameter is ruled out
+Converting input coverage data......
+Extracted interpolated population.
+Extracted raw coverage data...
+Transformed coverage data.
+use specific version of UNWPP data, touchstone_pop parameter is ruled out
+Converting input coverage data......
+Extracted interpolated population.
+Extracted raw coverage data...
+Transformed coverage data.
+
+> fvps <- fvps %>% mutate(disease = ifelse(is.na(disease), 
++     vaccine, disease)) %>% mutate(disease = ifelse(disease == 
++     "PCV3", "PCV", disease)) %>% mutate(disease = ifelse(disease == 
++     "Hib3", "Hib", disease)) %>% mutate(disease = ifelse(disease == 
++     "DTP3", "DTP", disease))
+
+> fvps <- bind_rows(fvps, fvps[fvps$disease == "DTP", 
++     ] %>% mutate(disease = "Diphtheria"), fvps[fvps$disease == 
++     "DTP", ] %>% mutate(disease = "Tetanus"), fvps[fvps$disease == 
++     "DTP", ] %>% mutate(disease = "Pertussis")) %>% filter(disease != 
++     "DTP")
+
+> fvps <- fvps %>% mutate(scenario_type = ifelse(scenario_type == 
++     "default_update", "default_update_catchup", scenario_type)) %>% 
++     bind_rows(fvps %>% filter(scenario_type %in% c("default_update"), 
++         activity_type != "routine-intensified"))
+
+> fvps <- fvps %>% select(scenario_description, country, 
++     disease, scenario_type, vaccine, activity_type, year, gender, 
++     age, fvps_adjusted)
+
+> fvps <- fvps %>% filter(!(scenario_type %in% c("default_update") & 
++     activity_type %in% "routine-intensified"))
+
+> fvps <- fvps %>% filter(fvps_adjusted > 0) %>% group_by(scenario_description, 
++     country, disease, scenario_type, vaccine, activity_type, 
++     year) %>% summarise(fvps_adjusted = sum(fvps_adjusted))
+
+> df_int <- readRDS("intervention_perspective_impact.rds")
+
+> df_cro <- readRDS("cross_sectional_impact.rds")
+
+> df_lif <- readRDS("life_time_impact.rds")
+
+> df_iu <- readRDS("combined_data.rds")
+
+> df_burd22 <- readRDS("burden_202210covidimpact.rds")
+
+> df_burd21 <- readRDS("burden_202110gavi.rds")
+
+> pop <- vimpact::get_population(con, touchstone_pop = "202210covidimpact-2")
+
+> pop <- pop %>% group_by(country, year) %>% summarise(value = sum(value, 
++     na.rm = TRUE))
+
+> pop <- pop %>% left_join(ctry %>% select(country, 
++     who_region), by = "country")
+
+> pop <- pop %>% left_join(df_burd22 %>% select(country, 
++     country_name) %>% distinct(), by = "country")
+
+> rmarkdown::render("report.Rmd")
+
+
+processing file: report.Rmd
+  |                                   |                           |   0%  |                                   |                           |   2%                                             |                                   |.                          |   3% (setup)                                     |                                   |.                          |   5%                                             |                                   |..                         |   7% (hdw_cross_deaths)                          |                                   |..                         |   9%                                             |                                   |...                        |  10% (hdw_other)                                 |                                   |...                        |  12%                                             |                                   |....                       |  14% (mitigate_headline)                         |                                   |....                       |  16%                                             |                                   |.....                      |  17% (mitigate_pc)                               |                                   |.....                      |  19%                                             |                                   |......                     |  21% (mitigate_who_cross)                        |                                   |......                     |  22%                                             |                                   |.......                    |  24% (mitigate_who_cohort)                       |                                   |.......                    |  26%                                             |                                   |.......                    |  28% (burden_unc)                                |                                   |........                   |  29%                                             |                                   |........                   |  31% (excess_deaths_full_uncert_cross )          |                                   |.........                  |  33%                                             |                                   |.........                  |  34% (excess_cases_full_uncert_cross)            |                                   |..........                 |  36%                                             |                                   |..........                 |  38% (excess_dalys_full_uncert_cross)            |                                   |...........                |  40%                                             |                                   |...........                |  41% (cross_solar_system_who)                    |                                   |............               |  43%                                             |                                   |............               |  45% (cross_solar_system_who_2023)               |                                   |.............              |  47%                                             |                                   |.............              |  48% (cross_solar_system_who_2023_determ)        |                                   |..............             |  50%                                             |                                   |..............             |  52% (cross_solar_system_who_2023_cases)         |                                   |..............             |  53%                                             |                                   |...............            |  55% (cross_solar_system_who_2023_cases_determ)  |                                   |...............            |  57%                                             |                                   |................           |  59% (cross_solar_system_who_2023_dalys)         |                                   |................           |  60%                                             |                                   |.................          |  62% (cross_solar_system_who_2023_dalys_determ)  |                                   |.................          |  64%                                             |                                   |..................         |  66% (plot_mitigate_timing_cross_deaths)         |                                   |..................         |  67%                                             |                                   |...................        |  69% (plot_mitigate_timing_cross_cases)          |                                   |...................        |  71%                                             |                                   |....................       |  72% (plot_mitigate_timing_cross_dalys)          |                                   |....................       |  74%                                             |                                   |....................       |  76% (agg data)                                  |                                   |.....................      |  78%                                             |                                   |.....................      |  79% (diff)                                      |                                   |......................     |  81%                                             |                                   |......................     |  83% (unnamed-chunk-1)                           |                                   |.......................    |  84%                                             |                                   |.......................    |  86% (unnamed-chunk-2)                           |                                   |........................   |  88%                                             |                                   |........................   |  90% (unnamed-chunk-3)                           |                                   |.........................  |  91%                                             |                                   |.........................  |  93% (unnamed-chunk-4)                           |                                   |.......................... |  95%                                             |                                   |.......................... |  97% (unnamed-chunk-5)                           |                                   |...........................|  98%                                             |                                   |...........................| 100% (disease_stacked_bar)                                                                                                                                                          
+output file: report.knit.md
+
+/usr/bin/pandoc +RTS -K512m -RTS report.knit.md --to html4 --from markdown+autolink_bare_uris+tex_math_single_backslash --output report.html --self-contained --variable bs3=TRUE --section-divs --table-of-contents --toc-depth 3 --template /usr/local/lib/R/site-library/rmarkdown/rmd/h/default.html --no-highlight --variable highlightjs=1 --number-sections --variable theme=bootstrap --mathjax --variable 'mathjax-url=https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML' --include-in-header /tmp/RtmpMYIOMl/rmarkdown-str3c4c0ec023f6.html 
+
+Output created: report.html
+[ end        ]  2023-12-11 16:04:31
+[ elapsed    ]  Ran report in 45.35396 mins
+[ unexpected ]  figures/cross_solar_system_who_2023_cases_determ-1.png
+[ ...        ]  figures/cross_solar_system_who_2023_cases-1.png
+[ ...        ]  figures/cross_solar_system_who_2023_dalys_determ-1.png
+[ ...        ]  figures/cross_solar_system_who_2023_dalys-1.png
+[ ...        ]  figures/cross_solar_system_who_2023_determ-1.png
+[ ...        ]  figures/cross_solar_system_who_2023-1.png
+[ ...        ]  figures/cross_solar_system_who-1.png
+[ ...        ]  figures/excess_cases_full_uncert_cross-1.png
+[ ...        ]  figures/excess_dalys_full_uncert_cross-1.png
+[ ...        ]  figures/excess_deaths_full_uncert_cross-1.png
+[ ...        ]  figures/plot_mitigate_timing_cross_cases-1.png
+[ ...        ]  figures/plot_mitigate_timing_cross_dalys-1.png
+[ ...        ]  figures/plot_mitigate_timing_cross_deaths-1.png
+[ artefact   ]  report.html: f106590f7f1d6bb225f72131fedbd696
+[ ...        ]  figures/excess_deaths_full_uncert_cross-1.pdf: cf913579a3726c39931f085c4fd3f287
+[ ...        ]  figures/plot_mitigate_timing_cross_deaths-1.pdf: 1ad85a5c3257d199ab9d59f3b4b7a630
+[ ...        ]  figures/cross_solar_system_who_2023_determ-1.pdf: 41f9829021b9363ebf7c1244042b21fe
+[ ...        ]  mitigate_cross_deaths.csv: ff21d8aabd4fa2cda27939d21b86d699
+[ ...        ]  mitigate_cohort_deaths.csv: 107f4c68b6739c4d6fa145ee853bef32
+[ ...        ]  mitigate_cross_cases.csv: 05b8328c1cae7af1f18d0e10c8533f12
+[ ...        ]  mitigate_cohort_cases.csv: 16549ae54119be6b5020924e12886f33
+[ ...        ]  mitigate_cross_dalys.csv: 10f2a32776c418e3c89562b8ef4ef57b
+[ ...        ]  mitigate_cohort_dalys.csv: d2db652ca086c9e33a4d9ad36b3f7772
+[ ...        ]  excess_cross_deaths.csv: 7de30876da4fd3cdcade900b41e24c16
+[ ...        ]  excess_cross_cases.csv: 7d195f9c26694681a0b132fe13dd9924
+[ ...        ]  excess_cross_dalys.csv: c4c7f6248c28af2b3f7566779b7f868f
+[ ...        ]  excess_cohort_deaths.csv: 768641189775a53df112d7eef870a805
+[ ...        ]  excess_cohort_cases.csv: d45037fb5e63978f00679ebc669a8eda
+[ ...        ]  excess_cohort_dalys.csv: 6d345f38d6a5e12ae4267e98eb7ba29e
+[ ...        ]  difference_activity_type.csv: 309b7053f16710889fde20227a8c4f26
+[ ...        ]  difference_year.csv: 94dc9934fed8e0833f4ddce6e05243c5
+[ ...        ]  pc_drop_per_country.csv: 03c2068d99ed338d6bc063719c426300
+[ ...        ]  figures/disease_stacked_bar-1.pdf: 2afca883e336d41415fe461f4275dcc7
+[ commit     ]  paper-third-figures-final/20231211-151910-222f940e
+[ copy       ]

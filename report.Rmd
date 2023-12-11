@@ -1,0 +1,492 @@
+---
+title: "Figures for third paper mk2"
+author: "Science"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: TRUE
+    number_sections: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,
+                      message = FALSE,
+                      warning = FALSE,
+                      dpi = 300,
+                      fig.ext = c("png"),
+                      fig.width = 10,
+                      fig.height = 10,
+                      fig.path = "figures/")
+
+options(dplyr.summarise.inform = FALSE)
+```
+
+
+
+# Brief description
+
+Models were rerun for measles, rubella, meningitis A, Hepatitis B, HPV and yellow fever. Four scenarios were run: no-vaccination, default-update, default-update-catchup, default-nocovid. The impacts were calculated generally as:
+
+default_nocovid = novax - default_nocovid,
+
+default_update = novax - default_update,
+
+default_catchup = default_update - default_update_catchup,
+
+but we also consider default_nocovid-default_update. The time period we consider is 2020 to 2030.
+
+# Where has the 2020-21 disruption left us?
+
+```{r hdw_cross_deaths}
+hdw <- headline_diff_full_who()
+
+hdw %>%
+  flextable() %>%
+  set_caption("Excess deaths per calendar year.")
+
+hdw %>% write.csv("excess_cross_deaths.csv", row.names = FALSE)
+
+```
+
+```{r hdw_other}
+hdw <- headline_diff_full_who(outc = "cases")
+
+hdw %>% write.csv("excess_cross_cases.csv", row.names = FALSE)
+
+hdw <- headline_diff_full_who(outc = "dalys")
+
+hdw %>% write.csv("excess_cross_dalys.csv", row.names = FALSE)
+
+hdw <- headline_diff_full_who(d_def = d_def_cohort_2030, d_noc = d_noc_cohort_2030)
+
+hdw %>% write.csv("excess_cohort_deaths.csv", row.names = FALSE)
+
+hdw <- headline_diff_full_who(d_def = d_def_cohort_2030, d_noc = d_noc_cohort_2030, outc = "cases")
+
+hdw %>% write.csv("excess_cohort_cases.csv", row.names = FALSE)
+
+hdw <- headline_diff_full_who(d_def = d_def_cohort_2030, d_noc = d_noc_cohort_2030, outc = "dalys")
+
+hdw %>% write.csv("excess_cohort_dalys.csv", row.names = FALSE)
+
+```
+
+# What can be done to mitigate losses in coverage 
+
+## Headline figures {.tabset}
+
+### Tables
+
+```{r mitigate_headline}
+t <- mitigate_table(d_def_cross_2030, grouping = NULL)
+t_death <- t %>% filter(outcome == "deaths_catchup_impact") %>% mutate(across(-outcome, round))
+out <- paste0(t_death$mean_out, " (95%[", t_death$lo_95, ", ", t_death$hi_95,
+              "], 80%[", t_death$lo_80, ", ",t_death$hi_80, 
+              "], 50%[", t_death$lo_50, ", ", t_death$hi_50, "]) med =", t_death$median_out)
+
+t2 <- mitigate_table(d_def_cohort_2030, grouping = NULL)
+t2_death <- t2 %>% filter(outcome == "deaths_catchup_impact") %>% mutate(across(-outcome, round))
+out2 <- paste0(t2_death$mean_out, " (95%[", t2_death$lo_95, ", ", t2_death$hi_95,
+              "], 80%[", t2_death$lo_80, ", ",t2_death$hi_80, 
+              "], 50%[", t2_death$lo_50, ", ", t2_death$hi_50, "]) med =", t2_death$median_out)
+```
+
+Catch-up activities as we have modelled them would avert `r out` deaths between calendar years 2020-2030 and `r out2` between birth cohorts 2020-2030.
+
+
+```{r mitigate_pc}
+noc <- d_noc_cross_2030 %>%
+  select(run_id, country, year, deaths_default, modelling_group, disease, who_region) %>%
+  rename(deaths_nocovid = deaths_default)
+
+def <- d_def_cross_2030 %>%
+  select(run_id, country, year, deaths_default, deaths_catchup, modelling_group, disease, who_region) %>%
+  rename(deaths_covid = deaths_default,
+         deaths_catchup = deaths_catchup)
+
+comb <- left_join(def, noc, by = join_by(run_id, country, year, modelling_group, disease, who_region))
+
+comb <- comb %>% filter(year %in% 2020:2030)
+
+comb <- comb %>%
+  mutate(death_diff = deaths_covid - deaths_nocovid,
+         deaths_catch = deaths_covid - deaths_catchup)
+
+comb <- comb %>%
+  group_by(disease, run_id, who_region, year, country) %>%
+  summarise(death_diff = mean(death_diff, na.rm = TRUE),
+            deaths_catch = mean(deaths_catch, na.rm = TRUE))
+
+w <- comb %>%
+  group_by(run_id) %>%
+  summarise(death_diff = sum(death_diff),
+            deaths_catch = sum(deaths_catch)) %>%
+  mutate(propn = deaths_catch/death_diff)
+
+w_20_30 <- paste0(round(mean(w$propn*100), 2),  "% (95%[", round(quantile(w$propn*100, 0.025),2), "%, ", round(quantile(w$propn*100, 0.975),2), "%]) med=", round(median(w$propn*100), 2))
+
+num_20_30 <- paste0(round(mean(w$deaths_catch)),  " (95%[", round(quantile(w$deaths_catch, 0.025)), ", ", round(quantile(w$deaths_catch, 0.975)), "]) med=", round(median(w$deaths_catch)))
+
+denom_20_30 <- paste0(round(mean(w$death_diff)),  " (95%[", round(quantile(w$death_diff, 0.025)), ", ", round(quantile(w$death_diff, 0.975)), "]) med=", round(median(w$death_diff)))
+
+
+comb <- comb %>%
+  filter(year %in% 2023:2030)
+
+w <- comb %>%
+  group_by(run_id) %>%
+  summarise(death_diff = sum(death_diff),
+            deaths_catch = sum(deaths_catch)) %>%
+  mutate(propn = deaths_catch/death_diff)
+
+w_23_30 <- paste0(round(mean(w$propn*100), 2),  "% (95%[", round(quantile(w$propn*100, 0.025),2), "%, ", round(quantile(w$propn*100, 0.975),2), "%]) med=", round(median(w$propn*100), 2))
+
+num_23_30 <- paste0(round(mean(w$deaths_catch)),  " (95%[", round(quantile(w$deaths_catch, 0.025)), ", ", round(quantile(w$deaths_catch, 0.975)), "]) med=", round(median(w$deaths_catch)))
+
+denom_23_30 <- paste0(round(mean(w$death_diff)),  " (95%[", round(quantile(w$death_diff, 0.025)), ", ", round(quantile(w$death_diff, 0.975)), "]) med=", round(median(w$death_diff)))
+```
+
+This represents `r w_20_30` of excess deaths between calendar years 2020 and 2030 [numerator `r num_20_30`, denominator `r denom_20_30`] due to disruptions or `r w_23_30` of excess deaths between calendar years 2023 and 2030 [numerator `r num_23_30`, denominator `r denom_23_30`]. 
+
+```{r mitigate_who_cross}
+main <- mitigate_who_table(d_def_cross_2030, tot=t)
+main_cases <- mitigate_who_table(d_def_cross_2030, outc = "cases", tot=t)
+main_dalys <- mitigate_who_table(d_def_cross_2030, outc = "dalys", tot=t)
+
+main %>%
+  flextable(cwidth = 2) %>%
+  flextable::set_caption("Mitigated deaths due to catch-up activities- calendar view.")
+
+write.csv(main, "mitigate_cross_deaths.csv", row.names = FALSE)
+write.csv(main_cases, "mitigate_cross_cases.csv", row.names = FALSE)
+write.csv(main_dalys, "mitigate_cross_dalys.csv", row.names = FALSE)
+```
+
+```{r mitigate_who_cohort}
+main <- mitigate_who_table(d_def_cohort_2030, tot=t2)
+main_cases <- mitigate_who_table(d_def_cohort_2030, outc = "cases", tot=t2)
+main_dalys <- mitigate_who_table(d_def_cohort_2030, outc = "dalys", tot=t2)
+
+main %>%
+  flextable(cwidth = 2) %>%
+  flextable::set_caption("Mitigated deaths due to catch-up activities- cohort view.")
+
+write.csv(main, "mitigate_cohort_deaths.csv", row.names = FALSE)
+write.csv(main_cases, "mitigate_cohort_cases.csv", row.names = FALSE)
+write.csv(main_dalys, "mitigate_cohort_dalys.csv", row.names = FALSE)
+```
+
+# Full uncertainty figures {.tabset}
+
+## cross
+
+```{r burden_unc}
+noc <- d_noc_cross_2030 %>%
+  select(run_id, country, year, deaths_default,cases_default, dalys_default, modelling_group, disease, who_region) %>%
+  rename(deaths_nocovid = deaths_default,
+         cases_nocovid = cases_default, 
+         dalys_nocovid = dalys_default)
+
+def <- d_def_cross_2030 %>%
+  select(run_id, country, year, deaths_default, cases_default, dalys_default, modelling_group, disease, who_region) %>%
+  rename(deaths_covid = deaths_default,
+         cases_covid = cases_default,
+         dalys_covid = dalys_default)
+
+comb <- left_join(def, noc, by = join_by(run_id, country, year, modelling_group, disease, who_region))
+
+comb <- comb %>%
+  mutate(death_diff = deaths_covid-deaths_nocovid,
+         case_diff  = cases_covid - cases_nocovid,
+         daly_diff = dalys_covid - dalys_nocovid)
+
+comb <- comb %>%
+  group_by(run_id, country, year, who_region, disease) %>%
+  summarise(death_diff = mean(death_diff),
+            deaths_covid = mean(deaths_covid),
+            deaths_nocovid = mean(deaths_nocovid),
+            case_diff = mean(case_diff),
+            cases_covid = mean(cases_covid),
+            cases_nocovid = mean(cases_nocovid),
+            daly_diff = mean(daly_diff),
+            dalys_covid = mean(dalys_covid),
+            dalys_nocovid = mean(dalys_nocovid),)
+
+
+comb3 <- comb %>%
+  ungroup() %>%
+  select(run_id, country, year, disease, deaths_covid, deaths_nocovid) %>%
+  pivot_longer(names_to = "scenario", values_to = "deaths", -c(run_id, country, year, disease)) %>%
+  group_by(run_id, year, disease, scenario) %>%
+  summarise(deaths = sum(deaths))
+
+
+```
+
+
+
+```{r excess_deaths_full_uncert_cross ,fig.cap="Highlighted if median is greater than 200 at any point, only figures where the abs(median) excess is >50 are included."}
+p <- fun_excess_ribbon_95(comb, "deaths", thresh=200, thresh2=50)
+
+ggsave(plot=p,  filename="excess_deaths_full_uncert_cross-1.png", path="figures", bg = "white", width = 12, height = 10)
+ggsave(plot=p,  filename="excess_deaths_full_uncert_cross-1.pdf", path="figures", bg = "white", width = 12, height = 10)
+```
+
+```{r excess_cases_full_uncert_cross, fig.cap="Highlighted if median is greater than 200 at any point, only figures where the abs(median) excess is >50 are included."}
+fun_excess_ribbon(comb, "cases", thresh=200, thresh2=50)
+```
+
+```{r excess_dalys_full_uncert_cross, fig.cap="Highlighted if median is greater than 200 at any point, only figures where the abs(median) excess is >50 are included."}
+fun_excess_ribbon(comb, "dalys", thresh=200, thresh2=50)
+```
+
+
+```{r cross_solar_system_who, fig.width = 12}
+
+fun_solar_system()
+```
+
+
+```{r cross_solar_system_who_2023, fig.width = 12}
+
+fun_solar_system(yar = 2023:2030)
+```
+
+```{r cross_solar_system_who_2023_determ, fig.width = 12}
+
+p <- fun_solar_system(yar = 2023:2030, determ=TRUE)
+ggsave(plot=p,  filename="cross_solar_system_who_2023_determ-1.png", path="figures", bg = "white", width = 12, height = 10)
+ggsave(plot=p,  filename="cross_solar_system_who_2023_determ-1.pdf", path="figures", bg = "white", width = 12, height = 10)
+```
+
+```{r cross_solar_system_who_2023_cases, fig.width = 12}
+
+fun_solar_system(yar = 2023:2030, outc = "cases")
+```
+
+```{r cross_solar_system_who_2023_cases_determ, fig.width = 12}
+
+fun_solar_system(yar = 2023:2030, outc = "cases", determ=TRUE)
+```
+
+```{r cross_solar_system_who_2023_dalys, fig.width = 12}
+
+fun_solar_system(yar = 2023:2030, outc="dalys")
+```
+
+```{r cross_solar_system_who_2023_dalys_determ, fig.width = 12}
+
+fun_solar_system(yar = 2023:2030, outc="dalys", determ=TRUE)
+```
+
+```{r plot_mitigate_timing_cross_deaths, fig.width=12, fig.height=12}
+p <- plot_mitigate_timing_95(outc = "deaths", thresh2=50)
+
+ggsave(plot=p,  filename="plot_mitigate_timing_cross_deaths-1.png", path="figures", bg = "white", width = 12, height = 10)
+ggsave(plot=p,  filename="plot_mitigate_timing_cross_deaths-1.pdf", path="figures", bg = "white", width = 12, height = 10)
+```
+
+```{r plot_mitigate_timing_cross_cases, fig.width=12, fig.height=12}
+plot_mitigate_timing(outc = "cases", thresh2=50)
+```
+
+```{r plot_mitigate_timing_cross_dalys, fig.width=12, fig.height=12}
+plot_mitigate_timing(outc = "dalys", thresh2=50)
+```
+
+# Interim update
+In this section we perform a simple interim update on the `covidimpactiu` touchstone. 
+
+```{r agg data}
+
+comb_dat <- bind_rows(lapply(c(1), 
+                             function(x){
+                               fun_join_fvps_df_iu(fvps, df, RI_scaling = x, ctry_subset = ctry_subset_parm, dis_subset = NULL) %>%
+                                 mutate(scaling = x)
+                             }))
+
+cc <- make_country_classifiers(con)
+
+# aggregate
+comb_dat_agg_ave <- comb_dat %>%
+  group_by(country, disease, vaccine, activity_type,  year, scenario_description, scenario_type, scaling, run_id) %>%
+  summarise(deaths = sum(deaths, na.rm = TRUE), cases = sum(cases, na.rm = TRUE), dalys = sum(dalys, na.rm = TRUE))
+
+
+```
+
+## Overall differences {.tabset}
+
+We present the percentage difference to the `default-update` baseline over the entire time period 2020:2030 for each scaling of the potential routine-intensified impact ratio.
+
+```{r diff}
+comb_dat_agg_ave <- comb_dat_agg_ave %>%
+  left_join(comb_dat_agg_ave %>%
+              filter(scenario_type %in% "default_update") %>% 
+              ungroup() %>%
+              select(-c(scenario_type, scenario_description)) %>% 
+              rename(deaths_baseline = deaths, cases_baseline = cases, dalys_baseline = dalys),
+            by = c("country", "disease", "vaccine", "activity_type", "year", "scaling", "run_id"))
+
+comb_dat_agg_ave <- comb_dat_agg_ave %>% left_join(cc, by = "country")
+```
+
+
+## What is the breakdown of excess deaths by year and activity type? {.tabset}
+
+
+```{r }
+t <- comb_dat_agg_ave %>%
+  filter(scenario_type %in% c("default_nocovid", "default_update")) %>%
+  filter(scaling == 1) %>%
+  filter(year %in% 2020:2030) %>%
+  group_by(scenario_type, run_id) %>%
+  summarise(all_deaths_averted = sum(deaths, na.rm = TRUE)) %>%
+  pivot_wider(names_from = scenario_type, values_from = all_deaths_averted)
+
+
+noc <- tidy_qi(t$default_nocovid)
+noc10 <- tidy_qi(t$default_nocovid/10)
+cov <- tidy_qi(t$default_update)
+cov10 <- tidy_qi(t$default_update/10)
+
+diff <- tidy_qi(t$default_nocovid-t$default_update)
+diffpc <- tidy_qi((t$default_nocovid-t$default_update)/t$default_update*100, roundamt = 2)
+```
+
+We estimate that in the absence of COVID-related disruptions, with conservative targets by 2030, there will be `r noc` deaths averted over the decade, so `r noc10` on average a year. In contrast, with COVID-related disruptions and recovery, we estimate that `r cov` will be averted over the decade, so `r cov10` on average a year. This is a difference of `r diffpc`%. We may also consider this by country, below.
+
+```{r }
+t <- comb_dat_agg_ave %>%
+  filter(scenario_type %in% c("default_nocovid", "default_update")) %>%
+  filter(scaling == 1) %>%
+  filter(year %in% 2020:2030) %>%
+  group_by(scenario_type, run_id, country) %>%
+  summarise(all_deaths_averted = sum(deaths, na.rm = TRUE)) %>%
+  pivot_wider(names_from = scenario_type, values_from = all_deaths_averted)
+
+t2 <- t
+
+t2 <- t2 %>%
+  group_by(country) %>%
+  summarise(noc = tidy_qi(default_nocovid),
+            cov = tidy_qi(default_update),
+            diff = tidy_qi(default_nocovid - default_update),
+            diffpc = tidy_qi((default_nocovid-default_update)/default_update*100))
+
+t2 %>% flextable(cwidth=2)
+
+t2 %>% write.csv("pc_drop_per_country.csv", row.names = FALSE)
+```
+
+
+
+```{r }
+t <- comb_dat_agg_ave %>%
+  filter(scenario_type %in% c("default_nocovid", "default_update")) %>%
+  filter(scaling == 1) %>%
+  filter(year %in% 2020:2030) %>%
+  group_by(scenario_type, activity_type, run_id) %>%
+  summarise(all_deaths_averted = sum(deaths, na.rm = TRUE)) %>%
+  pivot_wider(names_from = scenario_type, values_from = all_deaths_averted) %>%
+  mutate(diff = default_nocovid - default_update) %>%
+  group_by(run_id) %>%
+  mutate(propn = diff/sum(diff))
+
+campaign_prop <- tidy_qi(t$propn[t$activity_type=="campaign"]*100, 2)
+routine_prop <- tidy_qi(t$propn[t$activity_type=="routine"]*100, 2)
+```
+
+Of the deaths averted over the decade, and the excess deaths due to coverage disruptions, `r campaign_prop`% is due to differences in campaigns and `r routine_prop`% is due to routine differences. The breakdown is shown below.
+
+```{r}
+t <- comb_dat_agg_ave %>%
+  filter(scenario_type %in% c("default_nocovid", "default_update")) %>%
+  filter(scaling == 1) %>%
+  filter(year %in% 2020:2030) %>%
+  group_by(scenario_type, activity_type, disease, run_id) %>%
+
+  summarise(all_deaths_averted = sum(deaths, na.rm = TRUE)) %>%
+  pivot_wider(names_from = scenario_type, values_from = all_deaths_averted) %>%
+  mutate(diff = default_nocovid - default_update) %>%
+  group_by(disease, run_id) %>%
+  mutate(propn = diff/sum(diff)) %>% arrange(disease) 
+
+
+
+t %>% 
+  group_by(disease, activity_type) %>% 
+  summarise(propn = tidy_qi(propn, roundamt = 2)) %>%
+  flextable(cwidth = 2)
+
+write.csv(t%>% 
+  group_by(disease, activity_type) %>% 
+  summarise(propn = tidy_qi(propn, roundamt = 4)), "difference_activity_type.csv", row.names = FALSE)
+```
+
+```{r}
+t <- comb_dat_agg_ave %>%
+  filter(scenario_type %in% c("default_nocovid", "default_update")) %>%
+  filter(scaling == 1) %>%
+  filter(year %in% 2020:2030) %>%
+  group_by(scenario_type, year, disease, run_id) %>%
+
+  summarise(all_deaths_averted = sum(deaths, na.rm = TRUE)) %>%
+  pivot_wider(names_from = scenario_type, values_from = all_deaths_averted) %>%
+  mutate(diff = default_nocovid - default_update) %>%
+  group_by(disease) %>%
+  mutate(propn = diff/sum(diff)) %>% arrange(disease) %>%
+  mutate(year_group = ifelse(year %in% 2020:2021, "2020-1", ifelse(year %in% 2022:2025, "2022-5", "2026-30"))) %>%
+  group_by(year_group, disease, run_id) %>%
+  summarise(diff_group = round(sum(diff))) %>%
+  group_by(disease, run_id) %>%
+  mutate(propn_group = round(diff_group/sum(diff_group)*100, 2))
+
+t %>% mutate(year_group = as.character(year_group)) %>% 
+  group_by(disease, year_group) %>% 
+  summarise(propn_group = tidy_qi(propn_group, roundamt = 2)) %>%
+  flextable(cwidth = 2)
+
+write.csv(t%>% mutate(year_group = as.character(year_group)) %>% 
+  group_by(disease, year_group) %>% 
+  summarise(propn_group = tidy_qi(propn_group, roundamt = 4)), "difference_year.csv", row.names = FALSE)
+```
+
+# All disease stacked bar
+
+```{r disease_stacked_bar, fig.height=8, fig.width=12, fig.cap="Interim update projected excess deaths (hundreds) due to coverage disruption between 2020 and 2030"}
+yar <- 2020:2030
+df_iu <- df_iu %>% left_join(ctry %>% select(country, who_region))
+
+t <- df_iu %>%
+  rename(short_name = scenario_type, deaths_averted = deaths) %>%
+  filter(year %in% yar) %>%
+  group_by(disease, year, short_name, country, who_region, vaccine) %>%
+  mutate(who_region = ifelse(who_region=="PAHO", who_region, gsub("O", "", who_region))) %>%
+  summarise(deaths_averted = mean(deaths_averted, na.rm = TRUE)) %>%
+  group_by(disease, short_name, who_region) %>%
+  summarise(deaths_averted = sum(deaths_averted, na.rm = TRUE)) %>%
+  select(disease, short_name, deaths_averted, who_region) %>%
+  pivot_wider(names_from = short_name, values_from = deaths_averted) %>%
+  mutate(excess_deaths = default_nocovid - default_update) %>%
+  mutate(disease = as.factor(disease))%>%
+  filter((excess_deaths)>1)%>%
+  left_join(ctry %>% group_by(who_region) %>% summarise(n_ctry = length(unique(country))), by = "who_region") 
+
+t <- t %>%
+  mutate(group = disease, value = excess_deaths/100, who_region = paste0(who_region, " (", n_ctry," VIMC countries)")) 
+
+p <- t %>% 
+  ggplot()+
+  aes(fill = group, y = value, x = who_region)+
+  geom_col()+
+  scale_fill_manual(values=disease_palette(unique(t$disease))$pal)+
+  coord_flip()+
+  theme_minimal()+
+  #facet_wrap(who_region~., ncol = 1)+
+  theme(legend.position = "bottom")+
+  labs(fill = "Disease/ Vaccine", x = "WHO region", y = "Excess deaths (100s)")
+
+ggsave(plot=p,  filename="disease_stacked_bar-1.pdf", path="figures", bg = "white", width = 12, height = 8)
+
+```

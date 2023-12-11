@@ -1,0 +1,111 @@
+
+script: script.R
+
+parameters:
+  short_run:
+    default: true
+
+artefacts: 
+    - report:
+        description: Final report with all figures for burden/impact
+        filenames: report.html
+    - staticgraph:
+        description: Final figures for paper
+        filenames: 
+          - figures/excess_deaths_full_uncert_cross-1.pdf
+          - figures/plot_mitigate_timing_cross_deaths-1.pdf
+          - figures/cross_solar_system_who_2023_determ-1.pdf
+    - data:
+        description: handy tables
+        filenames:
+          - mitigate_cross_deaths.csv
+          - mitigate_cohort_deaths.csv
+          - mitigate_cross_cases.csv
+          - mitigate_cohort_cases.csv
+          - mitigate_cross_dalys.csv
+          - mitigate_cohort_dalys.csv
+          
+          - excess_cross_deaths.csv
+          - excess_cross_cases.csv
+          - excess_cross_dalys.csv
+          
+          - excess_cohort_deaths.csv
+          - excess_cohort_cases.csv
+          - excess_cohort_dalys.csv
+    - data:
+        description: Handy tables from iu
+        filenames:
+          - difference_activity_type.csv
+          - difference_year.csv
+          - pc_drop_per_country.csv
+    - staticgraph:
+        description: Figure for paper from presentation
+        filenames:
+        - figures/disease_stacked_bar-1.pdf
+
+displayname: Presentation figures following response to reviewers
+
+description: All figures used in third consortium-wide paper
+
+packages:
+  - dplyr
+  - ggplot2
+  - tidyr
+  - flextable
+  - MetBrewer
+  - jenner
+  - vimpact
+  - countrycode
+
+sources:
+  - R/general_fun.R
+  - R/pull_table.R
+  - R/fun_solar_system.R
+  - R/mitigate_table.R
+  - R/util.R
+  - R/plot_mitigate_timing.R
+  - R/fun_excess_ribbon.R
+  - R/fun.R
+
+resources:
+  - report.Rmd
+
+global_resources: 
+  R/disease_palette.R: disease_palette.R
+  R/get_estimates_annex_covidimpact.R: get_estimates_annex_covidimpact.R
+
+connection:
+  con: source
+  annex: annex
+
+depends:
+   internal-2020-native-data-sets:
+      id: latest
+      use:
+        source/native-impact-estimates-post-2017-runs.rds: native-impact-estimates-post-2017-runs.rds
+   incoming-dtp-bcg-impact-ratios:
+      id: latest
+      use:
+        source/dtp_bcg_impact_ratios.rds: dtp_bcg_impact_ratios.rds
+   202210covidimpact-impact-estimates:
+        id: latest
+        use:
+          life_time_impact.rds: life_time_impact.rds
+          cross_sectional_impact.rds: cross_sectional_impact.rds
+          intervention_perspective_impact.rds: intervention_perspective_impact.rds
+   adhoc-covidimpact-iu:
+        id: latest
+        use:
+          combined_data.rds: combined_aggregated_model_average.rds
+   202210covidimpact-burden-estimates:
+        id: latest
+        use:
+          burden_202210covidimpact.rds: burden_202210covidimpact.rds
+   202110-burden-estimates:
+        id: latest
+        use:
+          burden_202110gavi.rds: burden_202110gavi.rds
+
+requester: VIMC
+
+author: Science
